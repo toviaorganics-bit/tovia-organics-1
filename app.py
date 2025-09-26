@@ -50,7 +50,7 @@ CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": [
     "http://localhost:5000",
     "http://127.0.0.1:5500",
     "http://localhost:5500",
-    "https://tovia-organics.onrender.com"  # Add your Render URL here
+    "https://tovia-organics-new.onrender.com"  # Add your Render URL here
 ]}})
 
 # Import routes
@@ -60,8 +60,6 @@ from routes import verify_bp, init_verify_routes
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', os.urandom(24))
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies']
-
-# Replace your MongoDB configuration section with this:
 
 # MongoDB Configuration
 mongodb_uri = os.environ.get('MONGODB_URI')
@@ -89,15 +87,14 @@ try:
     with app.app_context():
         mongo.db.command('ping')
         print("MongoDB connection successful!")
-        
+    
+    # Initialize and register blueprints AFTER mongo is initialized
+    init_verify_routes(mongo)
+    app.register_blueprint(verify_bp)
+    
 except Exception as e:
     print(f"Error connecting to MongoDB: {e}")
     raise
-
-# Initialize and register blueprints AFTER mongo is initialized
-if mongo:
-    init_verify_routes(mongo)
-    app.register_blueprint(verify_bp)
 
 # Email configuration (SMTP)
 SMTP_HOST = os.environ.get('SMTP_HOST')
@@ -154,46 +151,12 @@ def send_verification_email(user_email, name, verification_token, base_url=None)
         return False
 
 def send_email(subject, recipient, body, html=None):
+    """Send an email via configured SMTP server. recipient can be a string or list."""
     print(f"\n=== Starting Email Send Process ===")
     print(f"Subject: {subject}")
     print(f"Recipient: {recipient}")
     print(f"Has HTML content: {bool(html)}")
     
-    try:
-        # Use SMTP first
-        if SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASS:
-            print("Attempting to send via SMTP...")
-            msg = EmailMessage()
-            msg['Subject'] = subject
-            msg['From'] = FROM_EMAIL
-            msg['To'] = recipient
-            
-            if html:
-                msg.add_alternative(html, subtype='html')
-            else:
-                msg.set_content(body)
-            
-            context = ssl.create_default_context()
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-                server.starttls(context=context)
-                server.login(SMTP_USER, SMTP_PASS)
-                server.send_message(msg)
-            print("Email sent successfully via SMTP!")
-            return True
-        # Fallback to Gmail OAuth if SMTP fails
-        elif GMAIL_OAUTH_REFRESH_TOKEN and GMAIL_OAUTH_CLIENT_ID and GMAIL_OAUTH_CLIENT_SECRET:
-            print("Falling back to Gmail OAuth...")
-            return send_via_gmail_oauth(subject, recipient, body, html, GMAIL_OAUTH_REFRESH_TOKEN)
-        else:
-            print("ERROR: No email configuration available")
-            return False
-    except Exception as e:
-        print(f"Email send error: {str(e)}")
-        import traceback
-        print("Full traceback:")
-        print(traceback.format_exc())
-        return False
-    """Send an email via configured SMTP server. recipient can be a string or list."""
     # Prefer Gmail OAuth2 refresh-token if provided (single-account flow)
     oauth_refresh = GMAIL_OAUTH_REFRESH_TOKEN
     # If not provided via env, try token file
@@ -239,6 +202,7 @@ def send_email(subject, recipient, body, html=None):
             server.starttls(context=context)
             server.login(SMTP_USER, SMTP_PASS)
             server.send_message(msg)
+        print("Email sent successfully via SMTP!")
         return True
     except Exception as e:
         print(f"[email] failed to send email: {e}")
@@ -382,22 +346,6 @@ def oauth2_callback():
     except Exception as e:
         return f'Failed to save token: {e}', 500
     return 'Authorization successful. Refresh token saved to server.'
-
-# Initialize extensions
-jwt = JWTManager(app)
-bcrypt = Bcrypt(app)
-
-# Initialize MongoDB
-try:
-    mongo = PyMongo(app)
-    print("MongoDB client initialized!")
-    
-    # Initialize and register blueprints
-    init_verify_routes(mongo)
-    app.register_blueprint(verify_bp)
-except Exception as e:
-    print(f"Error connecting to MongoDB: {e}")
-    raise
 
 # User Helper Functions
 def create_user(name, email, password):
