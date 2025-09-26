@@ -5,7 +5,7 @@ const API_BASE_URL = (() => {
         return `http://${hostname}:5000`;
     }
     // Replace with your actual backend URL for production
-    return 'https://your-backend-domain.com';
+    return 'https://tovia-organics-new.onrender.com';
 })();
 
 // Authentication state
