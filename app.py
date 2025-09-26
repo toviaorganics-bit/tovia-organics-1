@@ -1,6 +1,7 @@
 import ssl
 import secrets
 import smtplib
+import certifi
 from email.message import EmailMessage
 from flask import Flask, render_template, request, jsonify, redirect, url_for, make_response
 from flask_pymongo import PyMongo
@@ -42,22 +43,31 @@ load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
-# Allow CORS from the frontend dev server and enable credentials for cookies
+
+# Configure CORS
 CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": [
     "http://127.0.0.1:5000",
     "http://localhost:5000",
     "http://127.0.0.1:5500",
-    "http://localhost:5500"
+    "http://localhost:5500",
+    "https://tovia-organics.onrender.com"  # Add your Render URL here
 ]}})
 
 # Import routes
 from routes import verify_bp, init_verify_routes
 
-# Configuration
+# Basic Configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
-app.config['MONGO_URI'] = os.environ.get('MONGODB_URI')
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', os.urandom(24))
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies']
+
+# MongoDB Configuration with SSL/TLS
+mongodb_uri = os.environ.get('MONGODB_URI')
+if mongodb_uri:
+    app.config['MONGO_URI'] = mongodb_uri
+    app.config['MONGO_TLS'] = True
+    app.config['MONGO_TLS_ALLOW_INVALID_CERTIFICATES'] = True  # For development only
+    app.config['MONGO_TLS_CA_CRT'] = certifi.where()
 app.config['JWT_ACCESS_COOKIE_NAME'] = 'tovia_session'
 app.config['JWT_COOKIE_CSRF_PROTECT'] = False
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)

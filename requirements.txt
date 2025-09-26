@@ -13,3 +13,4 @@ google-auth==2.23.0
 google-auth-httplib2==0.1.0
 requests==2.31.0
 Frozen-Flask==1.0.1
+certifi==2024.2.2
