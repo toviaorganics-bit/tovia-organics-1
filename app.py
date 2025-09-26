@@ -61,22 +61,17 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', os.urandom(24))
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies']
 
-# MongoDB Configuration with SSL/TLS
+# MongoDB Configuration
 mongodb_uri = os.environ.get('MONGODB_URI')
 if mongodb_uri:
+    # Ensure the URI has proper SSL parameters
+    if 'ssl=true' not in mongodb_uri.lower() and 'tls=true' not in mongodb_uri.lower():
+        separator = '&' if '?' in mongodb_uri else '?'
+        mongodb_uri += f'{separator}ssl=true&retryWrites=true&w=majority'
+    
     app.config['MONGO_URI'] = mongodb_uri
-    app.config['MONGO_TLS'] = True
-    app.config['MONGO_TLS_CA_CRT'] = certifi.where()
-    app.config['MONGO_TLS_ALLOW_INVALID_CERTIFICATES'] = False
-    app.config['MONGO_TLS_ALLOW_INVALID_HOSTNAMES'] = False
-    app.config['MONGO_CONNECT'] = True
-    app.config['MONGO_RETRY_WRITES'] = True
-app.config['JWT_ACCESS_COOKIE_NAME'] = 'tovia_session'
-app.config['JWT_COOKIE_CSRF_PROTECT'] = False
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
-app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies']
-stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+else:
+    raise ValueError("MONGODB_URI environment variable is required")
 
 # Email configuration (SMTP)
 SMTP_HOST = os.environ.get('SMTP_HOST')
@@ -369,13 +364,11 @@ bcrypt = Bcrypt(app)
 # Initialize MongoDB
 try:
     mongo = PyMongo(app)
-    # Test the connection
-    mongo.db.command('ping')
-    print("Connected to MongoDB successfully!")
+    print("MongoDB client initialized!")
     
     # Initialize and register blueprints
-    init_verify_routes(mongo)  # Initialize verify routes with mongo instance
-    app.register_blueprint(verify_bp)  # Register the verify blueprint
+    init_verify_routes(mongo)
+    app.register_blueprint(verify_bp)
 except Exception as e:
     print(f"Error connecting to MongoDB: {e}")
     raise
@@ -2763,3 +2756,21 @@ def add_cors_headers(response):
     except Exception:
         pass
     return response
+
+@app.route('/api/health')
+def health_check():
+    try:
+        # Test MongoDB connection
+        mongo.db.command('ping')
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'database': 'disconnected',
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
