@@ -61,17 +61,43 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', os.urandom(24))
 app.config['JWT_TOKEN_LOCATION'] = ['headers', 'cookies']
 
+# Replace your MongoDB configuration section with this:
+
 # MongoDB Configuration
 mongodb_uri = os.environ.get('MONGODB_URI')
-if mongodb_uri:
-    # Ensure the URI has proper SSL parameters
-    if 'ssl=true' not in mongodb_uri.lower() and 'tls=true' not in mongodb_uri.lower():
-        separator = '&' if '?' in mongodb_uri else '?'
-        mongodb_uri += f'{separator}ssl=true&retryWrites=true&w=majority'
-    
-    app.config['MONGO_URI'] = mongodb_uri
-else:
+if not mongodb_uri:
     raise ValueError("MONGODB_URI environment variable is required")
+
+# Clean up the URI if needed
+if mongodb_uri and 'ssl=true' not in mongodb_uri.lower() and 'tls=true' not in mongodb_uri.lower():
+    separator = '&' if '?' in mongodb_uri else '?'
+    mongodb_uri += f'{separator}ssl=true&retryWrites=true&w=majority'
+
+app.config['MONGO_URI'] = mongodb_uri
+
+# Initialize extensions
+jwt = JWTManager(app)
+bcrypt = Bcrypt(app)
+
+# Initialize MongoDB - with error handling
+mongo = None
+try:
+    mongo = PyMongo(app)
+    print("MongoDB client initialized!")
+    
+    # Test connection safely
+    with app.app_context():
+        mongo.db.command('ping')
+        print("MongoDB connection successful!")
+        
+except Exception as e:
+    print(f"Error connecting to MongoDB: {e}")
+    raise
+
+# Initialize and register blueprints AFTER mongo is initialized
+if mongo:
+    init_verify_routes(mongo)
+    app.register_blueprint(verify_bp)
 
 # Email configuration (SMTP)
 SMTP_HOST = os.environ.get('SMTP_HOST')
@@ -2682,23 +2708,37 @@ def forbidden_error(error):
 def initialize_app():
     """Initialize the application with database and sample data"""
     try:
-        # Test MongoDB connection
-        mongo.db.command('ping')
-        print('MongoDB connected successfully!')
-        
-        # Create admin user and sample data in development only unless SKIP_SAMPLE is set
-        skip_sample = os.environ.get('SKIP_SAMPLE', '').lower() in ('1', 'true', 'yes')
-        if not skip_sample:
-            admin_email = 'admin@toviaorganics.com'
-            if not get_user_by_email(admin_email):
-                admin_user = create_user('Admin', admin_email, 'admin123')  # Change password in production!
-                print(f'Admin user created: {admin_email} / admin123')
-            # Initialize sample data
-            init_sample_data()
-            print('Sample data initialized!')
-        
+        # Test MongoDB connection safely
+        if mongo and mongo.db:
+            mongo.db.command('ping')
+            print('MongoDB connected successfully!')
+            
+            # Create admin user and sample data in development only unless SKIP_SAMPLE is set
+            skip_sample = os.environ.get('SKIP_SAMPLE', '').lower() in ('1', 'true', 'yes')
+            if not skip_sample:
+                admin_email = 'admin@toviaorganics.com'
+                existing_admin = get_user_by_email(admin_email)
+                if not existing_admin:
+                    admin_user = create_user('Admin', admin_email, 'admin123')  # Change password in production!
+                    if admin_user:
+                        print(f'Admin user created: {admin_email} / admin123')
+                    else:
+                        print('Failed to create admin user')
+                else:
+                    print('Admin user already exists')
+                
+                # Initialize sample data
+                try:
+                    init_sample_data()
+                    print('Sample data initialized!')
+                except Exception as e:
+                    print(f'Error initializing sample data: {e}')
+        else:
+            print('MongoDB not properly initialized')
+            
     except Exception as e:
         print(f'Database initialization error: {e}')
+        # Don't raise the error in production - let the app start even if DB connection fails initially
 
 # =============================================================================
 # CLI COMMANDS
