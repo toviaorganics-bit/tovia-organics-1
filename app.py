@@ -66,8 +66,11 @@ mongodb_uri = os.environ.get('MONGODB_URI')
 if mongodb_uri:
     app.config['MONGO_URI'] = mongodb_uri
     app.config['MONGO_TLS'] = True
-    app.config['MONGO_TLS_ALLOW_INVALID_CERTIFICATES'] = True  # For development only
     app.config['MONGO_TLS_CA_CRT'] = certifi.where()
+    app.config['MONGO_TLS_ALLOW_INVALID_CERTIFICATES'] = False
+    app.config['MONGO_TLS_ALLOW_INVALID_HOSTNAMES'] = False
+    app.config['MONGO_CONNECT'] = True
+    app.config['MONGO_RETRY_WRITES'] = True
 app.config['JWT_ACCESS_COOKIE_NAME'] = 'tovia_session'
 app.config['JWT_COOKIE_CSRF_PROTECT'] = False
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
