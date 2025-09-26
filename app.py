@@ -2738,7 +2738,7 @@ def initialize_app():
             
     except Exception as e:
         print(f'Database initialization error: {e}')
-        # Don't raise the error in production - let the app start even if DB connection fails initially
+        
 
 # =============================================================================
 # CLI COMMANDS
